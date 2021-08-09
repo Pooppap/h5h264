@@ -8,5 +8,5 @@ import numpy as np
 # fid = h5py.h5f.open('comp.h5', fapl=plist)
 # f = h5py.File(fid)
 f = h5py.File('comp.h5','r')
-print "%d" % (np.sum(f['h264']))
+print("%d" % (np.sum(f['h264'])))
 f.close()

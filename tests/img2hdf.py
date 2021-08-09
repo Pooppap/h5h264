@@ -2,10 +2,10 @@
 
 import h5py
 import sys
-from scipy.misc import imread
+from imageio import imread
 
 if len(sys.argv) < 3:
-    print "Usage: img2hdf.py <output> <img1> ... <imgN>"
+    print("Usage: img2hdf.py <output> <img1> ... <imgN>")
     sys.exit(1)
 
 a = imread(sys.argv[2])
@@ -29,7 +29,7 @@ dset = f.create_dataset("data", (nimgs, height, width), compression=32010, dtype
 
 for (i,fname) in enumerate(sys.argv[2:]):
     a = imread(fname)
-    print "Reading %s" %(fname)
+    print("Reading %s" %(fname))
     dset[i,:,:] = a[:,:,0]+a[:,:,1]*256
 f.close()
 
@@ -41,7 +41,7 @@ dset2 = f2.create_dataset("data", (nimgs, height, width), compression='gzip', dt
 
 for (i,fname) in enumerate(sys.argv[2:]):
     a = imread(fname)
-    print "Reading %s" %(fname)
+    print("Reading %s" %(fname))
     dset2[i,:,:] = a[:,:,0]+a[:,:,1]*256
 f2.close()
 
