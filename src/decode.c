@@ -1,29 +1,29 @@
 #include <libavutil/avutil.h>
 #include <libavcodec/avcodec.h>
 
-static void decode(AVCodecContext *dec_ctx, AVFrame *frame, AVPacket *pkt)
-{
-  int ret;
-  ret = avcodec_send_packet(dec_ctx, pkt);
-  if(ret < 0)
-  {
-    fprintf(stderr, "Error sending a packet for decoding\n");
-    exit(1);
-  }
-  while(ret >= 0)
-  {
-    ret = avcodec_receive_frame(dec_ctx, frame);
-    if(ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
-    {
-      return;
-    }
-    else if(ret < 0)
-    {
-      fprintf(stderr, "Error during decoding\n");
-      exit(1);
-    }
-  }
-}
+// static void decode(AVCodecContext *dec_ctx, AVFrame *frame, AVPacket *pkt)
+// {
+//   int ret;
+//   ret = avcodec_send_packet(dec_ctx, pkt);
+//   if(ret < 0)
+//   {
+//     fprintf(stderr, "Error sending a packet for decoding\n");
+//     exit(1);
+//   }
+//   while(ret >= 0)
+//   {
+//     ret = avcodec_receive_frame(dec_ctx, frame);
+//     if(ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+//     {
+//       return;
+//     }
+//     else if(ret < 0)
+//     {
+//       fprintf(stderr, "Error during decoding\n");
+//       exit(1);
+//     }
+//   }
+// }
 
 static int check_decoder_return(int ret)
 {
@@ -57,12 +57,12 @@ static int check_decoder_return(int ret)
 
 static char * h264_decode(void * data, size_t data_size, size_t * output_size)
 {
-  char * output;
   AVPacket * pkt;
   AVFrame * frame;
   // uint8_t * frame_data;
   int ret, should_break;
   const AVCodec * codec;
+  char * output, * output_ptr;
   AVCodecParserContext * parser;
   AVCodecContext * codec_context = NULL;
 
@@ -72,6 +72,8 @@ static char * h264_decode(void * data, size_t data_size, size_t * output_size)
   data_size -= sizeof(size_t);
 
   output = malloc(* output_size);
+  /* The world of pointer arithmetic, Oh so sweet */
+  output_ptr = output;
   // avcodec_register_all();
   codec = avcodec_find_decoder(AV_CODEC_ID_H264);
   if(!codec)
@@ -119,47 +121,77 @@ static char * h264_decode(void * data, size_t data_size, size_t * output_size)
     fprintf(stderr, "Could not allocate packet buffer\n");
     exit(1);
   }
+  int i = 0;
 
   while(data_size > 0)
   {
-    while(1)
+    ret = av_parser_parse2(parser, codec_context, &pkt->data, &pkt->size, data, data_size, 0, 0, AV_NOPTS_VALUE);
+    if(ret < 0)
     {
-      ret = av_parser_parse2(parser, codec_context, &pkt->data, &pkt->size, data, data_size, 0, 0, AV_NOPTS_VALUE);
-      if(ret < 0)
-      {
-        fprintf(stderr, "Error while parsing\n");
-        exit(1);
-      }
-
-      data += ret;
-      data_size  -= ret;
-      
-      if(pkt->size)
-      {
-        ret = avcodec_send_packet(codec_context, pkt);
-        should_break = check_decoder_return(ret);
-        if(should_break)
-        {
-          break;
-        }
-      }
+      fprintf(stderr, "Error while parsing\n");
+      exit(1);
     }
-    
-    while(1)
+
+    data += pkt->size;
+    data_size  -= pkt->size;
+
+    if(pkt->size)
     {
-      ret = avcodec_receive_frame(codec_context, frame);
+      ret = avcodec_send_packet(codec_context, pkt);
       should_break = check_decoder_return(ret);
-      if(should_break)
-      {
-        break;
-      }
-
-      for (int y = 0; y < frame->height; y++)
-      {
-        memcpy(output, (char *) &frame->data[0][y * frame->linesize[0]], frame->width);
-        output += frame->width;
-      }
     }
+
+    ret = avcodec_receive_frame(codec_context, frame);
+    should_break = check_decoder_return(ret);
+    if(should_break)
+    {
+      continue;
+    }
+
+    for (int y = 0; y < frame->height; y++)
+    {
+      memcpy(output_ptr, (char *) &frame->data[0][y * frame->linesize[0]], frame->width);
+      output_ptr += frame->width;
+    }
+    // while(1)
+    // {
+    //   ret = av_parser_parse2(parser, codec_context, &pkt->data, &pkt->size, data, data_size, 0, 0, AV_NOPTS_VALUE);
+    //   if(ret < 0)
+    //   {
+    //     fprintf(stderr, "Error while parsing\n");
+    //     exit(1);
+    //   }
+
+    //   data += ret;
+    //   data_size  -= ret;
+      
+    //   if(pkt->size)
+    //   {
+    //     ret = avcodec_send_packet(codec_context, pkt);
+    //     should_break = check_decoder_return(ret);
+    //     if(should_break)
+    //     {
+    //       break;
+    //     }
+    //   }
+    // }
+    
+    // while(1)
+    // {
+    //   ret = avcodec_receive_frame(codec_context, frame);
+    //   should_break = check_decoder_return(ret);
+    //   if(should_break)
+    //   {
+    //     break;
+    //   }
+
+    //   for (int y = 0; y < frame->height; y++)
+    //   {
+    //     memcpy(output, (char *) &frame->data[0][y * frame->linesize[0]], frame->width);
+    //     output += frame->width;
+    //   }
+    // }
+    i++;
   }
 
 
@@ -238,8 +270,8 @@ static char * h264_decode(void * data, size_t data_size, size_t * output_size)
     }
     for (int y = 0; y < frame->height; y++)
     {
-      memcpy(output, (char *) &frame->data[0][y * frame->linesize[0]], frame->width);
-      output += frame->width;
+      memcpy(output_ptr, (char *) &frame->data[0][y * frame->linesize[0]], frame->width);
+      output_ptr += frame->width;
     }
   }
 

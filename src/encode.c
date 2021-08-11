@@ -6,27 +6,27 @@
 #include <libavutil/mathematics.h>
 #include <libavutil/samplefmt.h>
 
-static void encode(AVCodecContext *enc_ctx, AVFrame *frame, AVPacket *pkt)
-{
-  int ret = avcodec_send_frame(enc_ctx, frame);
-  if(ret < 0)
-  {
-    fprintf(stderr, "Error sending a frame for encoding\n");
-    exit(1);
-  }
+// static void encode(AVCodecContext *enc_ctx, AVFrame *frame, AVPacket *pkt)
+// {
+//   int ret = avcodec_send_frame(enc_ctx, frame);
+//   if(ret < 0)
+//   {
+//     fprintf(stderr, "Error sending a frame for encoding\n");
+//     exit(1);
+//   }
 
-  while(ret >= 0)
-  {
-    ret = avcodec_receive_packet(enc_ctx, pkt);
-    if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
-      return;
-    else if(ret < 0)
-    {
-      fprintf(stderr, "Error during encoding\n");
-      exit(1);
-    }
-  }
-}
+//   while(ret >= 0)
+//   {
+//     ret = avcodec_receive_packet(enc_ctx, pkt);
+//     if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+//       return;
+//     else if(ret < 0)
+//     {
+//       fprintf(stderr, "Error during encoding\n");
+//       exit(1);
+//     }
+//   }
+// }
 
 static int check_encoder_return(int ret)
 {
@@ -61,10 +61,10 @@ static int check_encoder_return(int ret)
 static char * h264_encode(char * data, size_t size, size_t height, size_t width, int item_size, size_t * output_size)
 {
   // AVPacket * pkt;
-  char * output;
   AVFrame * frame;
   const AVCodec * codec;
   AVDictionary * param = 0;
+  char * output, * output_ptr;
   AVCodecContext * codec_context = NULL;
   int ret, n_frames, frm_idx, pkt_idx, should_break;
 
@@ -174,41 +174,63 @@ static char * h264_encode(char * data, size_t size, size_t height, size_t width,
   //   pkt[i].size = 0;
   // }
 
-  while(frm_idx <= n_frames)
+  while(frm_idx < n_frames)
   {
-    while(1)
+    for(int y = 0; y < height; y++)
     {
-      /* Y */
-      for(int y = 0; y < height; y++)
-      {
-        memcpy(&frame->data[0][y * frame->linesize[0]], data, width);
-        data += width;
-      }
-
-      /* Skip Cb and Cr */
-      frame->pts = frm_idx;
-      ret = avcodec_send_frame(codec_context, frame);
-      frm_idx++;
-      should_break = check_encoder_return(ret);
-      if(should_break)
-      {
-        break;
-      }
+      memcpy(&frame->data[0][y * frame->linesize[0]], data, width);
+      data += width;
     }
+    /* Skip Cb and Cr */
+    frame->pts = frm_idx;
+    ret = avcodec_send_frame(codec_context, frame);
+    frm_idx++;
+    should_break = check_encoder_return(ret);
+
+    pkt[pkt_idx] = av_packet_alloc();
+    ret = avcodec_receive_packet(codec_context, pkt[pkt_idx]);
+    should_break = check_encoder_return(ret);
+    if(should_break)
+    {
+      continue;
+    }
+
+    * output_size += pkt[pkt_idx]->size;
+    pkt_idx++;
+
+    // while(1)
+    // {
+    //   /* Y */
+    //   for(int y = 0; y < height; y++)
+    //   {
+    //     memcpy(&frame->data[0][y * frame->linesize[0]], data, width);
+    //     data += width;
+    //   }
+
+    //   /* Skip Cb and Cr */
+    //   frame->pts = frm_idx;
+    //   ret = avcodec_send_frame(codec_context, frame);
+    //   frm_idx++;
+    //   should_break = check_encoder_return(ret);
+    //   if(should_break)
+    //   {
+    //     break;
+    //   }
+    // }
     
-    while(1)
-    {
-      pkt[pkt_idx] = av_packet_alloc();
-      ret = avcodec_receive_packet(codec_context, pkt[pkt_idx]);
-      should_break = check_encoder_return(ret);
-      if(should_break)
-      {
-        break;
-      }
+    // while(1)
+    // {
+    //   pkt[pkt_idx] = av_packet_alloc();
+    //   ret = avcodec_receive_packet(codec_context, pkt[pkt_idx]);
+    //   should_break = check_encoder_return(ret);
+    //   if(should_break)
+    //   {
+    //     break;
+    //   }
 
-      * output_size += pkt[pkt_idx]->size;
-      pkt_idx++;
-    }
+    //   * output_size += pkt[pkt_idx]->size;
+    //   pkt_idx++;
+    // }
   }
 
   // Rewrite
@@ -245,17 +267,22 @@ static char * h264_encode(char * data, size_t size, size_t height, size_t width,
   // encode(codec_context, NULL, pkt[pkt_idx]);
   ret = avcodec_send_frame(codec_context, NULL);
   
-  if(pkt_idx != (n_frames + 1))
+  // if(pkt_idx != (n_frames + 1))
+  // {
+    // while(pkt_idx <= (n_frames + 1))
+  while(1)
   {
-    while(pkt_idx <= (n_frames + 1))
+    pkt[pkt_idx] = av_packet_alloc();
+    ret = avcodec_receive_packet(codec_context, pkt[pkt_idx]);
+    should_break = check_encoder_return(ret);
+    if(should_break)
     {
-      pkt[pkt_idx] = av_packet_alloc();
-      ret = avcodec_receive_packet(codec_context, pkt[pkt_idx]);
-      should_break = check_encoder_return(ret);
-      * output_size += pkt[pkt_idx]->size;
-      pkt_idx++;
+      break;
     }
+    * output_size += pkt[pkt_idx]->size;
+    pkt_idx++;
   }
+  // }
 
   /* Calculate output size*/
   /* We'll save the input size in the first 8 bytes */
@@ -267,26 +294,27 @@ static char * h264_encode(char * data, size_t size, size_t height, size_t width,
 
   /* Allocate output */
   output = av_mallocz(* output_size);
-  memcpy(output, &size, sizeof(size));
-  output += sizeof(size);
+  /* The world of pointer arithmetic, Oh so sweet */
+  output_ptr = output;
+  memcpy(output_ptr, &size, sizeof(size));
+  output_ptr += sizeof(size);
   // ptr = output;
   // memcpy(ptr, &size, sizeof(size));
   // ptr += sizeof(size);
   /* Copy data to output and free packets */
-  for(int i = 0; i < n_frames; i++)
+  for(int i = 0; i <= n_frames; i++)
   {
-    memcpy(output, (char *) pkt[i]->data, pkt[i]->size);
-    output += pkt[i]->size;
+    memcpy(output_ptr, (char *) pkt[i]->data, pkt[i]->size);
+    output_ptr += pkt[i]->size;
     // memcpy(ptr, pkt[i].data, pkt[i].size);
     // ptr += pkt[i].size;
-    av_packet_unref(pkt[i]);
+    av_packet_free(&pkt[i]);
   }
   /* Unref last packet */
-  av_packet_unref(pkt[pkt_idx]);
+  // av_packet_free(&pkt[pkt_idx - 1]);
   
   avcodec_free_context(&codec_context);
   av_frame_free(&frame);
-  free(pkt);
   
   return output;
 }
