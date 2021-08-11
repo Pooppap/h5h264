@@ -1,17 +1,20 @@
 Compression filter for HDF5 files using H.264 compression.
 It uses H.264 lossless compression through [ffmpeg](http://ffmpeg.org).
 
-It performs well on sequences of related images.
-
-When used to compress Flash X-ray Imaging diffraction data from LCLS it compresses the data to about 1/3 of the original size compared to 2/3 of the size for gzip compression, with similar performance.
+# Dependencies
+H264 compression filter depends on two libraries:
+1. FFmpeg
+2. libhdf5-dev
 
 # Installation
-
-Clone the repository and build using `cmake`.
-It depends on an available [ffmpeg](http://ffmpeg.org) with H.264 encoding support.
+1. Install dependencies from the system package manager e.g.
+```bash
+sudo apt-get install ffmpeg libhdf5-dev
+```
+2. Clone the repository and build using `cmake`, e.g.:
 
 ```bash
-git clone https://github.com:FilipeMaia/h5h264.git
+git clone https://github.com/Pooppap/h5h264.git
 cd h5h264
 mkdir build
 cd build
@@ -19,44 +22,38 @@ cmake ..
 make
 ```
 
+3. Use `sudo make install` to install this compression library to HDF5-predefined location or set `HDF5_PLUGIN_PATH` to the `build/lib`, as illustrated below. Both options will allow HDF5 to dynamically load the H264 filter.
+```bash
+export HDF5_PLUGIN_PATH=${HOME}/h5h264/build/lib
+```
+
 # Usage
-The filter identification number is 32010. This value must be passed as the
+The filter identification number is 32020. This value must be passed as the
 `filter` argument to `H5Pset_filter`.
 
-To be able to use the filter you also need to set `HDF5_PLUGIN_PATH` to point to the
-location of the newly built `libh5h264.so`/`libh5h264.dylib`, e.g.:
+This filters requires 3 user-defined compression-options,`compression_opts`. They are, in order of `compression_opts` arguments:
+1. `width`: Frame width
+2. `height`: Frame Height
+3. `item_size`: the size of one element in the array in bytes, e.g. one element in an array of float32 = 4 bytes. Currently only support 1, 2, or 4 byte
 
-```bash
-export HDF5_PLUGIN_PATH=${HOME}/h5h264/build/src
-```
-
-if you had cloned the repository in your home directory.
-
-For more information about HDF5 filters check this [PDF](https://www.hdfgroup.org/HDF5/doc/Advanced/DynamicallyLoadedFilters/HDF5DynamicallyLoadedFilters.pdf).
-
-
-This filters requires 3 user options (the `cd_values` argument of
- `H5Pset_filter`). The height and width of the images to be
-compressed and the size in bytes of each pixel of the image. It currently only
-supports 1,2 or 4 byte pixels.
-
-The tests directories contains examples on how to use this filter with h5py.
-
-Here is a simple example:
-
+Thus, to create `h5py` dataset with H264 compression, the command `create_dataset` can be invoked as in the following example:
 ```python
-import h5py
-import numpy as np
-
-f = h5py.File('simple.h5','w')
-width = 1024
-height = 1024
-nframes = 10
-data = np.zeros((nframes, height, width), dtype=np.int32)
-# The compression keyword argument tells h5py that we want to use the h5h264 filter.
-dset = f.create_dataset("data", (nframes, height, width), compression=32010, data=data,
-                        chunks=(5, height, width), compression_opts=(height, width, data.dtype.itemsize))
-f.close()
+...
+dset = f.create_dataset(
+    "data",
+    (n_frames, width, height),
+    compression=32010,
+    data=data,
+    chunks=(5, width, height),
+    compression_opts=(width, height, data.dtype.itemsize)
+)
+...
 ```
+The `chunks` argument is completely up to the user, but `chunks=(n_frames, width, height)` is preferable to maximise the encoding efficiency.
+
+The tests directories contain more examples in both C and Python
 
 Reading a compressed dataset requires no extra code;
+
+# Troubleshooting
+- Compression does not exist: make sure that HDF5 version is >= 1.8.11
