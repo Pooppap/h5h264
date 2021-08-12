@@ -28,7 +28,7 @@ export HDF5_PLUGIN_PATH=${HOME}/h5h264/build/lib
 ```
 
 # Usage
-The filter identification number is 32020. This value must be passed as the
+The filter identification number is `32030`. This value must be passed as the
 `filter` argument to `H5Pset_filter`.
 
 This filters requires 3 user-defined compression-options,`compression_opts`. They are, in order of `compression_opts` arguments:
@@ -42,7 +42,7 @@ Thus, to create `h5py` dataset with H264 compression, the command `create_datase
 dset = f.create_dataset(
     "data",
     (n_frames, width, height),
-    compression=32010,
+    compression=32030,
     data=data,
     chunks=(5, width, height),
     compression_opts=(width, height, data.dtype.itemsize)

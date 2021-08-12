@@ -40,7 +40,7 @@ def encode(temp_file, data):
         _file.create_dataset(
             "h264",
             data.shape,
-            compression=32020,
+            compression=32030,
             data=data,
             chunks=data.shape,
             compression_opts=(data.shape[1], data.shape[2], data.dtype.itemsize)
